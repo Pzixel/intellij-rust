@@ -24,8 +24,7 @@ import org.rust.ide.refactoring.RsNamesValidator.Companion.RESERVED_LIFETIME_NAM
 import org.rust.ide.utils.isCfgUnknown
 import org.rust.ide.utils.isEnabledByCfg
 import org.rust.lang.core.*
-import org.rust.lang.core.FeatureAvailability.CAN_BE_ADDED
-import org.rust.lang.core.FeatureAvailability.NOT_AVAILABLE
+import org.rust.lang.core.FeatureAvailability.*
 import org.rust.lang.core.RsPsiPattern.STD_ATTRIBUTES
 import org.rust.lang.core.macros.MacroExpansionMode
 import org.rust.lang.core.macros.macroExpansionManager
@@ -522,7 +521,7 @@ class RsErrorAnnotator : AnnotatorBase(), HighlightRangeExtension {
     }
 
     private fun checkConstParameter(holder: RsAnnotationHolder, constParameter: RsConstParameter) {
-        CONST_GENERICS.check(holder, constParameter, "const generics")
+        checkConstGenerics(holder, constParameter)
         checkDuplicates(holder, constParameter)
     }
 
@@ -1146,6 +1145,28 @@ private fun checkDuplicates(
         }
     }
     message.addToHolder(holder)
+}
+
+private fun checkConstGenerics(holder: RsAnnotationHolder, constParameter: RsConstParameter) {
+    if (CONST_GENERICS.availability(constParameter) == AVAILABLE) return
+
+    val feature = when (constParameter.typeReference?.type) {
+        is TyInteger, is TyBool, is TyChar -> {
+            val current = constParameter.cargoProject?.rustcInfo?.version?.semver
+            val since = MIN_CONST_GENERICS.since
+            if (current != null && since != null && current >= since) MIN_CONST_GENERICS else CONST_GENERICS
+        }
+        else -> CONST_GENERICS
+    }
+
+    if (feature === CONST_GENERICS && MIN_CONST_GENERICS.availability(constParameter) == AVAILABLE) {
+        val typeReference = constParameter.typeReference ?: return
+        val message = RsDiagnostic.ForbiddenConstGenericType(typeReference)
+        message.addToHolder(holder)
+        return
+    }
+
+    feature.check(holder, constParameter, "const generics")
 }
 
 private fun checkParamAttrs(holder: RsAnnotationHolder, o: RsOuterAttributeOwner) {

@@ -2755,6 +2755,42 @@ class RsErrorAnnotatorTest : RsAnnotatorTestBase(RsErrorAnnotator::class) {
         enum E<const C: i32> {}
     """)
 
+    @MockRustcVersion("1.47.0")
+    fun `test min const generics E0658 1`() = checkErrors("""
+        fn f<<error descr="const generics is experimental [E0658]">const C: i32</error>>() {}
+        struct S<<error descr="const generics is experimental [E0658]">const C: i32</error>>(A);
+        trait T<<error descr="const generics is experimental [E0658]">const C: i32</error>> {}
+        enum E<<error descr="const generics is experimental [E0658]">const C: i32</error>> {}
+    """)
+
+    @MockRustcVersion("1.47.0-nightly")
+    fun `test min const generics E0658 2`() = checkErrors("""
+        #![feature(min_const_generics)]
+        fn f<const C: i32>() {}
+        struct S<const C: i32>(A);
+        trait T<const C: i32> {}
+        enum E<const C: i32> {}
+    """)
+
+    @MockRustcVersion("1.47.0-nightly")
+    fun `test min const generics E0658 3`() = checkErrors("""
+        #![feature(const_generics)]
+        fn f<const C: i32>() {}
+        struct S<const C: i32>(A);
+        trait T<const C: i32> {}
+        enum E<const C: i32> {}
+    """)
+
+    @MockRustcVersion("1.47.0-nightly")
+    fun `test min const generics vs const generics E0658`() = checkErrors("""
+        #![feature(min_const_generics)]
+        struct A;
+        fn f<const C: <error descr="`A` is forbidden as the type of a const generic parameter">A</error>>() {}
+        struct S<const C: <error descr="`A` is forbidden as the type of a const generic parameter">A</error>>(A);
+        trait T<const C: <error descr="`A` is forbidden as the type of a const generic parameter">A</error>> {}
+        enum E<const C: <error descr="`A` is forbidden as the type of a const generic parameter">A</error>> {}
+    """)
+
     @MockRustcVersion("1.41.0")
     fun `test slice patterns E0658 1`() = checkErrors("""
         fn main() {
