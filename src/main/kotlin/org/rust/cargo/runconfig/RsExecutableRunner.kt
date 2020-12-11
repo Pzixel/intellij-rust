@@ -16,16 +16,18 @@ import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.util.Key
+import org.rust.cargo.project.model.cargoProjects
 import org.rust.cargo.runconfig.buildtool.CargoBuildManager.getBuildConfiguration
 import org.rust.cargo.runconfig.buildtool.CargoBuildManager.isBuildConfiguration
 import org.rust.cargo.runconfig.buildtool.CargoBuildManager.isBuildToolWindowEnabled
 import org.rust.cargo.runconfig.buildtool.cargoPatches
 import org.rust.cargo.runconfig.command.CargoCommandConfiguration
+import org.rust.cargo.toolchain.impl.CargoMetadata
 import org.rust.cargo.toolchain.tools.Cargo.Companion.getCargoCommonPatch
 import org.rust.cargo.toolchain.tools.RsTool.Companion.createGeneralCommandLine
 import org.rust.cargo.util.CargoArgsParser.Companion.parseArgs
 import org.rust.openapiext.computeWithCancelableProgress
-import java.nio.file.Path
+import org.rust.stdext.toPath
 import java.util.concurrent.CompletableFuture
 
 abstract class RsExecutableRunner(
@@ -53,14 +55,15 @@ abstract class RsExecutableRunner(
             return
         }
         environment.cargoPatches += getCargoCommonPatch(project)
-        environment.putUserData(BINARIES, CompletableFuture())
+        environment.putUserData(ARTIFACT, CompletableFuture())
         super.execute(environment)
     }
 
     override fun doExecute(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor? {
         if (state !is CargoRunStateBase) return null
 
-        val binaries = environment.binaries.orEmpty()
+        val artifact = environment.artifact
+        val binaries = artifact?.executables.orEmpty()
         val errorMessage = when {
             binaries.isEmpty() -> "Can't find a binary."
             binaries.size > 1 -> "More than one binary was produced. " +
@@ -74,9 +77,24 @@ abstract class RsExecutableRunner(
 
         val runCargoCommand = state.prepareCommandLine()
         val (_, executableArguments) = parseArgs(runCargoCommand.command, runCargoCommand.additionalArguments)
+
+        val workingDirectory = if (runCargoCommand.command == "test") {
+            val packageId = artifact?.package_id
+            val pkg = if (packageId != null) {
+                environment.project.cargoProjects.allProjects
+                    .mapNotNull { it.workspace?.findPackageById(packageId) }
+                    .firstOrNull()
+            } else {
+                null
+            }
+            pkg?.rootDirectory ?: runCargoCommand.workingDirectory
+        } else {
+            runCargoCommand.workingDirectory
+        }
+
         val runExecutable = createGeneralCommandLine(
-            binaries.single(),
-            runCargoCommand.workingDirectory,
+            binaries.single().toPath(),
+            workingDirectory,
             runCargoCommand.redirectInputFrom,
             runCargoCommand.backtraceMode,
             runCargoCommand.environmentVariables,
@@ -127,12 +145,13 @@ abstract class RsExecutableRunner(
     }
 
     companion object {
-        private val BINARIES: Key<CompletableFuture<List<Path>>> = Key.create("CARGO.CONFIGURATION.BINARIES")
+        private val ARTIFACT: Key<CompletableFuture<CargoMetadata.Artifact>> =
+            Key.create("CARGO.CONFIGURATION.ARTIFACT")
 
-        var ExecutionEnvironment.binaries: List<Path>?
-            get() = getUserData(this@Companion.BINARIES)?.get()
+        var ExecutionEnvironment.artifact: CargoMetadata.Artifact?
+            get() = getUserData(this@Companion.ARTIFACT)?.get()
             set(value) {
-                getUserData(this@Companion.BINARIES)?.complete(value)
+                getUserData(this@Companion.ARTIFACT)?.complete(value)
             }
     }
 }
