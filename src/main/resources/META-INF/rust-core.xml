@@ -1173,6 +1173,9 @@
             <add-to-group group-id="HelpMenu" anchor="after" relative-to-action="ReportProblem"/>
         </action>
 
+        <action id="Rust.ShareInPlayground"
+                class="org.rust.ide.actions.ShareInPlaygroundAction"/>
+
         <!-- Cargo-->
 
         <action id="Cargo.RustfmtFile"
@@ -1255,6 +1258,7 @@
             <reference id="Cargo.RustfmtFile"/>
             <reference id="Cargo.RustfmtCargoProject"/>
             <reference id="Rust.ConsoleREPL"/>
+            <reference id="Rust.ShareInPlayground"/>
 
             <add-to-group group-id="ToolsMenu" anchor="last"/>
             <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
